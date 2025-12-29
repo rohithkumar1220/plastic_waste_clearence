@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Plastic Waste Clearance System</title>
+
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+
+<style>
+body {
+  margin: 0;
+  font-family: Arial, sans-serif;
+  background: linear-gradient(to right, #56ab2f, #a8e063);
+}
+
+.container {
+  width: 90%;
+  max-width: 900px;
+  margin: auto;
+  padding-top: 30px;
+}
+
+.card {
+  background: white;
+  padding: 20px;
+  border-radius: 12px;
+  box-shadow: 0 10px 20px rgba(0,0,0,0.2);
+  margin-bottom: 20px;
+}
+
+h2 {
+  text-align: center;
+  color: #2e7d32;
+}
+
+input, textarea, select, button {
+  width: 100%;
+  padding: 10px;
+  margin: 8px 0;
+}
+
+button {
+  background: #2e7d32;
+  color: white;
+  border: none;
+  cursor: pointer;
+}
+
+#map {
+  height: 300px;
+  margin: 10px 0;
+  border-radius: 10px;
+}
+
+.tabs {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 15px;
+}
+
+.tabs button {
+  flex: 1;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+th, td {
+  border: 1px solid #ccc;
+  padding: 8px;
+  text-align: center;
+}
+
+th {
+  background: #e8f5e9;
+}
+</style>
+</head>
+
+<body>
+
+<div class="container">
+
+<div class="tabs">
+  <button onclick="showUser()">User Complaint</button>
+  <button onclick="showAdmin()">Admin</button>
+</div>
+
+<!-- USER TAB -->
+<div id="userTab" class="card">
+  <h2>Report Plastic Waste</h2>
+
+  <form id="complaintForm">
+    <input type="text" id="name" placeholder="Your Name" required>
+
+    <input type="text" id="location" placeholder="Click map to auto-fill area" required>
+
+    <p><b>Click on the map to select location</b></p>
+    <div id="map"></div>
+
+    <textarea id="issue" placeholder="Describe the plastic waste problem" required></textarea>
+
+    <button type="submit">Submit Complaint</button>
+  </form>
+</div>
+
+<!-- ADMIN LOGIN -->
+<div id="adminLogin" class="card" style="display:none;">
+  <h2>Admin Login</h2>
+  <input type="text" id="adminUser" placeholder="Username">
+  <input type="password" id="adminPass" placeholder="Password">
+  <button onclick="login()">Login</button>
+</div>
+
+<!-- ADMIN DASHBOARD -->
+<div id="adminDashboard" class="card" style="display:none;">
+  <h2>Admin Dashboard</h2>
+
+  <table>
+    <thead>
+      <tr>
+        <th>Name</th>
+        <th>Area</th>
+        <th>Issue</th>
+        <th>Status</th>
+      </tr>
+    </thead>
+    <tbody id="tableBody"></tbody>
+  </table>
+</div>
+
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+<script>
+let map, marker;
+
+// INIT MAP
+window.onload = function () {
+  map = L.map('map').setView([20.5937, 78.9629], 5);
+
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '© OpenStreetMap'
+  }).addTo(map);
+
+  map.on('click', async function (e) {
+    if (marker) map.removeLayer(marker);
+    marker = L.marker(e.latlng).addTo(map);
+
+    // 🔁 Reverse Geocoding
+    let url = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${e.latlng.lat}&lon=${e.latlng.lng}`;
+
+    try {
+      let response = await fetch(url);
+      let data = await response.json();
+
+      let area =
+        data.address.road ||
+        data.address.suburb ||
+        data.address.village ||
+        data.address.city ||
+        data.address.state ||
+        "Unknown Area";
+
+      location.value = area;
+    } catch {
+      location.value = "Unable to fetch area";
+    }
+  });
+};
+
+// TAB CONTROL
+function showUser() {
+  userTab.style.display = "block";
+  adminLogin.style.display = "none";
+  adminDashboard.style.display = "none";
+  setTimeout(() => map.invalidateSize(), 100);
+}
+
+function showAdmin() {
+  userTab.style.display = "none";
+  adminLogin.style.display = "block";
+  adminDashboard.style.display = "none";
+}
+
+// SUBMIT COMPLAINT
+complaintForm.addEventListener("submit", function (e) {
+  e.preventDefault();
+
+  let complaint = {
+    name: name.value,
+    location: location.value,
+    issue: issue.value,
+    status: "Pending"
+  };
+
+  let complaints = JSON.parse(localStorage.getItem("complaints")) || [];
+  complaints.push(complaint);
+  localStorage.setItem("complaints", JSON.stringify(complaints));
+
+  alert("Complaint Submitted Successfully!");
+  this.reset();
+  if (marker) map.removeLayer(marker);
+});
+
+// ADMIN LOGIN
+function login() {
+  if (adminUser.value === "admin" && adminPass.value === "1234") {
+    adminLogin.style.display = "none";
+    adminDashboard.style.display = "block";
+    loadComplaints();
+  } else {
+    alert("Invalid credentials");
+  }
+}
+
+// LOAD COMPLAINTS
+function loadComplaints() {
+  let complaints = JSON.parse(localStorage.getItem("complaints")) || [];
+  tableBody.innerHTML = "";
+
+  complaints.forEach((c, i) => {
+    tableBody.innerHTML += `
+      <tr>
+        <td>${c.name}</td>
+        <td>${c.location}</td>
+        <td>${c.issue}</td>
+        <td>
+          <select onchange="updateStatus(${i}, this.value)">
+            <option ${c.status=="Pending"?"selected":""}>Pending</option>
+            <option ${c.status=="Cleaned"?"selected":""}>Cleaned</option>
+          </select>
+        </td>
+      </tr>`;
+  });
+}
+
+function updateStatus(index, value) {
+  let complaints = JSON.parse(localStorage.getItem("complaints"));
+  complaints[index].status = value;
+  localStorage.setItem("complaints", JSON.stringify(complaints));
+}
+</script>
+
+</body>
+</html>
